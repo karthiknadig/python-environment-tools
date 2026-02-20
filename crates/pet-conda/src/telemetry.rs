@@ -221,7 +221,11 @@ fn log_and_find_missing_envs(
         .collect::<Vec<_>>();
 
     // Oh oh, we have new envs, lets see what they are.
-    let manager = CondaManager::from_info(&conda_info.executable, conda_info)?;
+    let manager = CondaManager::from_info(
+        &conda_info.executable,
+        conda_info,
+        pet_core::manager::EnvManagerType::Conda,
+    )?;
     for path in missing_envs
         .clone()
         .iter()

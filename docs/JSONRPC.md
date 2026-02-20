@@ -54,6 +54,7 @@ interface ConfigureParams {
    * This is the path to the conda executable.
    *
    * Useful for VS Code so users can configure where they have installed Conda.
+   * For backwards compatibility, this can also be a path to a mamba or micromamba executable.
    */
   condaExecutable?: string;
   /**
@@ -270,7 +271,7 @@ interface Manager {
   /**
    * The type of the Manager.
    */
-  tool: "Conda" | "Pipenv" | "Poetry" | "Pyenv";
+  tool: "Conda" | "Mamba" | "Pipenv" | "Poetry" | "Pyenv";
   /**
    * The version of the manager/tool.
    * In the case of conda, this is the version of conda.
