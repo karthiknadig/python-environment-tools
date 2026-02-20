@@ -52,3 +52,5 @@ extends:
     preBuildSteps:
       - pwsh: Rename-Item -Path "./.cargo/config.toml.disabled" -NewName "config.toml"
         displayName: "Enable Azure Build config for Rust"
+      - pwsh: ./set-version.ps1 -Suffix "dev.$(Build.BuildId)"
+        displayName: "Set nightly version"
