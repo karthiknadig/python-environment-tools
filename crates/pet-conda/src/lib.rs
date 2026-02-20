@@ -349,10 +349,13 @@ impl Locator for Conda {
                         reporter.report_environment(&env);
 
                         // Also check for a mamba/micromamba manager in the same directory and report it.
+                        let is_new_mamba = !self.mamba_managers.contains_key(conda_dir);
                         if let Some(mamba_mgr) = self.mamba_managers.get_or_insert_with(conda_dir.clone(), || {
                             get_mamba_manager(conda_dir)
                         }) {
-                            reporter.report_manager(&mamba_mgr.to_manager());
+                            if is_new_mamba {
+                                reporter.report_manager(&mamba_mgr.to_manager());
+                            }
                         }
                     } else {
                         // We will still return the conda env even though we do not have the manager.

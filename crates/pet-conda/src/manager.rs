@@ -40,9 +40,13 @@ fn get_mamba_executable(path: &Path) -> Option<PathBuf> {
     #[cfg(windows)]
     let relative_paths = vec![
         PathBuf::from("Scripts").join("mamba.exe"),
+        PathBuf::from("Scripts").join("mamba.bat"),
         PathBuf::from("Scripts").join("micromamba.exe"),
+        PathBuf::from("Scripts").join("micromamba.bat"),
         PathBuf::from("bin").join("mamba.exe"),
+        PathBuf::from("bin").join("mamba.bat"),
         PathBuf::from("bin").join("micromamba.exe"),
+        PathBuf::from("bin").join("micromamba.bat"),
     ];
     #[cfg(unix)]
     let relative_paths = vec![
@@ -75,7 +79,7 @@ fn get_conda_bin_names() -> Vec<&'static str> {
 /// Specifically returns the file names that are valid for 'mamba'/'micromamba' on windows
 #[cfg(windows)]
 fn get_mamba_bin_names() -> Vec<&'static str> {
-    vec!["mamba.exe", "micromamba.exe"]
+    vec!["mamba.exe", "mamba.bat", "micromamba.exe", "micromamba.bat"]
 }
 
 /// Specifically returns the file names that are valid for 'mamba'/'micromamba' on linux/Mac
