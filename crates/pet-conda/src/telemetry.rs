@@ -11,8 +11,12 @@ use pet_core::{
 };
 
 use crate::{
-    conda_info::CondaInfo, conda_rc::Condarc, env_variables::EnvVariables,
-    environments::get_conda_environment_info, manager::CondaManager, utils::is_conda_install,
+    conda_info::CondaInfo,
+    conda_rc::Condarc,
+    env_variables::EnvVariables,
+    environments::get_conda_environment_info,
+    manager::{is_mamba_executable, CondaManager},
+    utils::is_conda_install,
 };
 
 pub fn report_missing_envs(
@@ -221,7 +225,12 @@ fn log_and_find_missing_envs(
         .collect::<Vec<_>>();
 
     // Oh oh, we have new envs, lets see what they are.
-    let manager = CondaManager::from_info(&conda_info.executable, conda_info)?;
+    let manager_type = if is_mamba_executable(&conda_info.executable) {
+        pet_core::manager::EnvManagerType::Mamba
+    } else {
+        pet_core::manager::EnvManagerType::Conda
+    };
+    let manager = CondaManager::from_info(&conda_info.executable, conda_info, manager_type)?;
     for path in missing_envs
         .clone()
         .iter()

@@ -4,7 +4,7 @@
 use crate::{
     conda_rc::{get_conda_rc_search_paths, Condarc},
     env_variables::EnvVariables,
-    manager::find_conda_binary,
+    manager::{find_conda_binary, find_mamba_binary},
     utils::{is_conda_env, is_conda_install},
 };
 use log::trace;
@@ -372,6 +372,10 @@ pub fn get_known_conda_install_locations(
     if let Some(conda_dir) = get_conda_dir_from_exe(&conda_from_path) {
         known_paths.push(conda_dir);
     }
+    // Also check for mamba/micromamba on PATH to discover its install directory
+    if let Some(mamba_dir) = get_conda_dir_from_exe(&find_mamba_binary(env_vars)) {
+        known_paths.push(mamba_dir);
+    }
     known_paths.sort();
     known_paths.dedup();
 
@@ -455,6 +459,10 @@ pub fn get_known_conda_install_locations(
     // Add conda installation found from PATH (handles non-standard locations)
     if let Some(conda_dir) = get_conda_dir_from_exe(&conda_from_path) {
         known_paths.push(conda_dir);
+    }
+    // Also check for mamba/micromamba on PATH to discover its install directory
+    if let Some(mamba_dir) = get_conda_dir_from_exe(&find_mamba_binary(env_vars)) {
+        known_paths.push(mamba_dir);
     }
     known_paths.sort();
     known_paths.dedup();

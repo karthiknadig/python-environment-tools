@@ -9,7 +9,7 @@ use environment_locations::{
 };
 use environments::{get_conda_environment_info, CondaEnvironment};
 use log::error;
-use manager::CondaManager;
+use manager::{get_mamba_manager, is_mamba_executable, CondaManager};
 use pet_core::{
     cache::LocatorCache,
     env::PythonEnv,
@@ -64,6 +64,7 @@ pub struct CondaTelemetryInfo {
 pub struct Conda {
     pub environments: Arc<LocatorCache<PathBuf, PythonEnvironment>>,
     pub managers: Arc<LocatorCache<PathBuf, CondaManager>>,
+    pub mamba_managers: Arc<LocatorCache<PathBuf, CondaManager>>,
     pub env_vars: EnvVariables,
     conda_executable: Arc<RwLock<Option<PathBuf>>>,
 }
@@ -73,6 +74,7 @@ impl Conda {
         Conda {
             environments: Arc::new(LocatorCache::new()),
             managers: Arc::new(LocatorCache::new()),
+            mamba_managers: Arc::new(LocatorCache::new()),
             env_vars: EnvVariables::from(env),
             conda_executable: Arc::new(RwLock::new(None)),
         }
@@ -80,6 +82,7 @@ impl Conda {
     fn clear(&self) {
         self.environments.clear();
         self.managers.clear();
+        self.mamba_managers.clear();
     }
 }
 
@@ -91,7 +94,12 @@ impl CondaLocator for Conda {
     ) -> Option<()> {
         // Look for environments that we couldn't find without spawning conda.
         let user_provided_conda_exe = conda_executable.is_some();
-        let conda_info = CondaInfo::from(conda_executable)?;
+        // Try the provided executable first (could be conda or mamba for backwards compat),
+        // then fall back to mamba/micromamba found on PATH if conda is unavailable.
+        let conda_info = CondaInfo::from(conda_executable).or_else(|| {
+            let mamba_exe = manager::find_mamba_binary(&self.env_vars);
+            CondaInfo::from(mamba_exe)
+        })?;
         let environments_map = self.environments.clone_map();
         let new_envs = conda_info
             .envs
@@ -158,6 +166,17 @@ impl CondaLocator for Conda {
                 // Keep track to search again later.
                 // Possible we'll find environments in other directories created using this manager
                 self.managers.insert(conda_dir.clone(), manager.clone());
+
+                // Also check for a mamba/micromamba manager in the same directory and report it.
+                let _ = self
+                    .mamba_managers
+                    .get_or_insert_with(conda_dir.clone(), || {
+                        let mgr = get_mamba_manager(&conda_dir);
+                        if let Some(ref m) = mgr {
+                            reporter.report_manager(&m.to_manager());
+                        }
+                        mgr
+                    });
 
                 // Find all the environments in the conda install folder. (under `envs` folder)
                 for conda_env in
@@ -272,6 +291,18 @@ impl Locator for Conda {
         let env_vars = self.env_vars.clone();
         let executable = self.conda_executable.read().unwrap().clone();
         thread::scope(|s| {
+            // If the user-provided conda_executable is actually a mamba/micromamba binary
+            // (backwards compatibility), report it as a mamba manager and discover its envs.
+            if let Some(ref exe) = executable {
+                if is_mamba_executable(exe) {
+                    if let Some(mamba_dir) = get_conda_dir_from_exe(&executable) {
+                        if let Some(mamba_mgr) = get_mamba_manager(&mamba_dir) {
+                            self.mamba_managers.insert(mamba_dir, mamba_mgr.clone());
+                            reporter.report_manager(&mamba_mgr.to_manager());
+                        }
+                    }
+                }
+            }
             // 1. Get a list of all know conda environments file paths
             let possible_conda_envs = get_conda_environment_paths(&env_vars, &executable);
             for path in possible_conda_envs {
@@ -318,6 +349,18 @@ impl Locator for Conda {
                         self.environments.insert(prefix.clone(), env.clone());
                         reporter.report_manager(&manager.to_manager());
                         reporter.report_environment(&env);
+
+                        // Also check for a mamba/micromamba manager in the same directory and report it.
+                        // Reporting inside the closure minimizes the TOCTOU window compared to a
+                        // separate contains_key check, though concurrent threads may still
+                        // briefly both invoke the closure before the write-lock double-check.
+                        let _ = self.mamba_managers.get_or_insert_with(conda_dir.clone(), || {
+                            let mgr = get_mamba_manager(conda_dir);
+                            if let Some(ref m) = mgr {
+                                reporter.report_manager(&m.to_manager());
+                            }
+                            mgr
+                        });
                     } else {
                         // We will still return the conda env even though we do not have the manager.
                         // This might seem incorrect, however the tool is about discovering environments.

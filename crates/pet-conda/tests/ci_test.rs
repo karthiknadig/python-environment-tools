@@ -334,6 +334,84 @@ fn detect_new_conda_env_created_with_p_flag_with_python() {
     assert_eq!(env.manager, Some(manager.clone()));
 }
 
+#[cfg(unix)]
+#[cfg_attr(feature = "ci", test)]
+#[allow(dead_code)]
+// Install mamba into the conda base env and verify both Conda and Mamba managers are reported
+fn detect_mamba_manager_alongside_conda() {
+    use std::sync::Arc;
+
+    use pet_conda::Conda;
+    use pet_core::{
+        manager::EnvManagerType, os_environment::EnvironmentApi,
+        python_environment::PythonEnvironmentKind, Locator,
+    };
+    use pet_reporter::{cache::CacheReporter, collect};
+
+    setup();
+
+    // Install mamba into the base conda environment
+    let output = std::process::Command::new(get_conda_exe())
+        .args(["install", "-n", "base", "mamba", "-c", "conda-forge", "-y"])
+        .output()
+        .expect("Failed to install mamba");
+    println!(
+        "Mamba install stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    println!(
+        "Mamba install stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.status.success(),
+        "Failed to install mamba into conda base env"
+    );
+
+    let env = EnvironmentApi::new();
+    let reporter = Arc::new(collect::create_reporter());
+    let conda = Conda::from(&env);
+    conda.find(&CacheReporter::new(reporter.clone()));
+
+    let managers = reporter.managers.lock().unwrap().clone();
+
+    let info = get_conda_info();
+    let conda_dir = PathBuf::from(info.conda_prefix.clone());
+
+    // Verify we have a Conda manager
+    let conda_manager = managers
+        .iter()
+        .find(|m| m.tool == EnvManagerType::Conda)
+        .unwrap_or_else(|| panic!("Conda manager not found in managers: {managers:?}"));
+    assert_eq!(
+        conda_manager.executable,
+        conda_dir.join("bin").join("conda")
+    );
+
+    // Verify we have a Mamba manager
+    let mamba_manager = managers
+        .iter()
+        .find(|m| m.tool == EnvManagerType::Mamba)
+        .unwrap_or_else(|| panic!("Mamba manager not found in managers: {managers:?}"));
+    assert_eq!(
+        mamba_manager.executable,
+        conda_dir.join("bin").join("mamba")
+    );
+
+    // Environments should still be reported as Conda kind
+    let environments = reporter.environments.lock().unwrap().clone();
+    let base_env = environments
+        .iter()
+        .find(|e| e.name == Some("base".into()))
+        .unwrap_or_else(|| panic!("Base env not found in environments: {environments:?}"));
+    assert_eq!(base_env.kind, Some(PythonEnvironmentKind::Conda));
+    // The environment manager should be Conda (not Mamba)
+    assert_eq!(
+        base_env.manager.as_ref().map(|m| m.tool),
+        Some(EnvManagerType::Conda)
+    );
+}
+
 #[derive(Deserialize)]
 struct CondaInfo {
     conda_version: String,
