@@ -140,18 +140,24 @@ fn is_mamba_executable_identifies_mamba_binaries() {
     use pet_conda::manager::is_mamba_executable;
     use std::path::Path;
 
+    // Cross-platform: forward-slash paths work on all platforms
     assert!(is_mamba_executable(Path::new("/usr/bin/mamba")));
     assert!(is_mamba_executable(Path::new("/usr/bin/micromamba")));
-    assert!(is_mamba_executable(Path::new("C:\\Scripts\\mamba.exe")));
-    assert!(is_mamba_executable(Path::new(
-        "C:\\Scripts\\micromamba.exe"
-    )));
     assert!(is_mamba_executable(Path::new("/opt/miniforge3/bin/mamba")));
 
     // Should NOT match conda or python
     assert!(!is_mamba_executable(Path::new("/usr/bin/conda")));
     assert!(!is_mamba_executable(Path::new("/usr/bin/python")));
-    assert!(!is_mamba_executable(Path::new("C:\\Scripts\\conda.exe")));
+
+    // Windows-specific paths with backslashes (only valid on Windows)
+    #[cfg(windows)]
+    {
+        assert!(is_mamba_executable(Path::new("C:\\Scripts\\mamba.exe")));
+        assert!(is_mamba_executable(Path::new(
+            "C:\\Scripts\\micromamba.exe"
+        )));
+        assert!(!is_mamba_executable(Path::new("C:\\Scripts\\conda.exe")));
+    }
 }
 
 /// Test that get_mamba_manager finds a mamba manager from a conda install with mamba.

@@ -168,13 +168,15 @@ impl CondaLocator for Conda {
                 self.managers.insert(conda_dir.clone(), manager.clone());
 
                 // Also check for a mamba/micromamba manager in the same directory and report it.
-                if !self.mamba_managers.contains_key(&conda_dir) {
-                    if let Some(mamba_mgr) = get_mamba_manager(&conda_dir) {
-                        self.mamba_managers
-                            .insert(conda_dir.clone(), mamba_mgr.clone());
-                        reporter.report_manager(&mamba_mgr.to_manager());
-                    }
-                }
+                let _ = self
+                    .mamba_managers
+                    .get_or_insert_with(conda_dir.clone(), || {
+                        let mgr = get_mamba_manager(&conda_dir);
+                        if let Some(ref m) = mgr {
+                            reporter.report_manager(&m.to_manager());
+                        }
+                        mgr
+                    });
 
                 // Find all the environments in the conda install folder. (under `envs` folder)
                 for conda_env in
@@ -349,14 +351,16 @@ impl Locator for Conda {
                         reporter.report_environment(&env);
 
                         // Also check for a mamba/micromamba manager in the same directory and report it.
-                        let is_new_mamba = !self.mamba_managers.contains_key(conda_dir);
-                        if let Some(mamba_mgr) = self.mamba_managers.get_or_insert_with(conda_dir.clone(), || {
-                            get_mamba_manager(conda_dir)
-                        }) {
-                            if is_new_mamba {
-                                reporter.report_manager(&mamba_mgr.to_manager());
+                        // Reporting inside the closure minimizes the TOCTOU window compared to a
+                        // separate contains_key check, though concurrent threads may still
+                        // briefly both invoke the closure before the write-lock double-check.
+                        let _ = self.mamba_managers.get_or_insert_with(conda_dir.clone(), || {
+                            let mgr = get_mamba_manager(conda_dir);
+                            if let Some(ref m) = mgr {
+                                reporter.report_manager(&m.to_manager());
                             }
-                        }
+                            mgr
+                        });
                     } else {
                         // We will still return the conda env even though we do not have the manager.
                         // This might seem incorrect, however the tool is about discovering environments.
