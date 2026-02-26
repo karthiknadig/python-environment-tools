@@ -43,19 +43,25 @@ fn find_json_output_is_valid() {
         "expected 'environments' array in output"
     );
 
-    // Each environment should have at minimum an executable and kind
+    // Each environment should have at minimum a kind.
+    // Executable may be null for environments without Python installed (e.g. Conda
+    // envs created without specifying python as a dependency).
     let environments = json["environments"].as_array().unwrap();
     assert!(
         !environments.is_empty(),
         "expected at least one environment to be discovered"
     );
+    let mut has_executable = false;
     for env in environments {
-        assert!(
-            env["executable"].is_string(),
-            "environment missing 'executable': {env}"
-        );
         assert!(env["kind"].is_string(), "environment missing 'kind': {env}");
+        if env["executable"].is_string() {
+            has_executable = true;
+        }
     }
+    assert!(
+        has_executable,
+        "expected at least one environment with an executable"
+    );
 }
 
 /// Test 2: `resolve --json` returns a resolved environment with a version.
@@ -192,9 +198,11 @@ fn find_workspace_scoping() {
 
     let scoped_envs = json["environments"].as_array().unwrap();
     for env in scoped_envs {
+        // executable may be null for environments without Python installed.
+        // No has_executable check: workspace-scoped finds may return zero environments.
         assert!(
-            env["executable"].is_string(),
-            "workspace environment missing 'executable': {env}"
+            env["kind"].is_string(),
+            "workspace environment missing 'kind': {env}"
         );
     }
 
